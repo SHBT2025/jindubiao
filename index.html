@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05070b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="进度表" />
+    <title>Jindubiao</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" sizes="192x192" href="192pc.png" />
+    <link rel="apple-touch-icon" href="512applogo.png" />
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script defer src="app.js"></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="top-bar">
+        <section class="brand-panel">
+          <div>
+            <h1>&#24037;&#20316;&#36827;&#24230;&#34920;&#26684;</h1>
+            <p>SCI-FI GRID WORKSPACE</p>
+          </div>
+        </section>
+
+        <section class="command-panel">
+          <label class="field">
+            <span>&#24403;&#21069;&#34920;&#26684;</span>
+            <select id="tableSelect"></select>
+          </label>
+          <label class="field table-name-field">
+            <span>&#34920;&#26684;&#21517;&#31216;</span>
+            <input id="tableNameInput" type="text" autocomplete="off" />
+          </label>
+          <button id="newTableBtn" type="button">&#26032;&#24314;</button>
+          <button id="importBtn" type="button">&#23548;&#20837; Excel</button>
+          <input id="importFileInput" type="file" accept=".xlsx,.xls,.csv" hidden />
+          <button id="editModeBtn" type="button">&#32534;&#36753;</button>
+          <button id="addColumnBtn" type="button">&#21152;&#21015;</button>
+          <button id="addRowBtn" type="button">&#21152;&#34892;</button>
+          <button id="deleteTableBtn" type="button" class="danger" hidden>&#21024;&#38500;&#34920;</button>
+          <button id="exportBtn" type="button" class="primary">&#21478;&#23384;&#20026; Excel</button>
+        </section>
+      </header>
+
+      <section class="grid-stage">
+        <div class="grid-frame">
+          <table id="progressTable" aria-label="工作进度表"></table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
