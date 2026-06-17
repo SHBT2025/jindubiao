@@ -124,7 +124,7 @@ p {
   gap: 10px;
   padding: 12px;
   min-width: 0;
-  overflow-x: auto;
+  overflow-x: visible;
   overflow-y: hidden;
 }
 

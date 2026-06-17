@@ -537,34 +537,75 @@ function switchTable() {
 }
 
 function exportExcel() {
-  const table = activeTable();
-  const data = [
-    table.columns,
-    ...table.rows.map((row) =>
-      table.columns.map((_, columnIndex) => {
-        const cell = row.cells[columnIndex] || { text: "", checked: false };
-        return cell.checked ? `${cell.text} ✓`.trim() : cell.text;
-      })
-    ),
-  ];
-
-  const fileBase = sanitizeFileName(table.name || "工作进度表");
-  if (window.XLSX) {
-    const worksheet = XLSX.utils.aoa_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "进度表");
-    XLSX.writeFile(workbook, `${fileBase}.xlsx`);
+  // 过滤掉没有数据的空表格
+  const nonEmptyTables = state.tables.filter(t => t.rows.length > 0 || t.columns.length > 0);
+  if (nonEmptyTables.length === 0) {
+    alert('没有可导出的数据，请先创建表格并添加内容。');
     return;
   }
 
-  const html = `<!doctype html><html><meta charset="utf-8"><body>${tableToHtml(data)}</body></html>`;
-  const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
-  downloadBlob(blob, `${fileBase}.xls`);
-}
+  // 如果没有 XLSX 库，回退到 HTML 导出（只导出当前表格）
+  if (!window.XLSX) {
+    const table = activeTable();
+    const data = [
+      table.columns,
+      ...table.rows.map((row) =>
+        table.columns.map((_, columnIndex) => {
+          const cell = row.cells[columnIndex] || { text: "", checked: false };
+          return cell.checked ? `${cell.text} ✓`.trim() : cell.text;
+        })
+      ),
+    ];
+    const fileBase = sanitizeFileName(table.name || "工作进度表");
+    const html = `<!doctype html><html><meta charset="utf-8"><body>${tableToHtml(data)}</body></html>`;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+    downloadBlob(blob, `${fileBase}.xls`);
+    return;
+  }
 
+  // 创建一个新工作簿
+  const workbook = XLSX.utils.book_new();
+  // 记录已使用的 Sheet 名，处理重名
+  const usedNames = new Set();
+
+  nonEmptyTables.forEach(table => {
+    // 构建数据：第一行是列头，后续是数据行
+    const data = [
+      table.columns,
+      ...table.rows.map((row) =>
+        table.columns.map((_, columnIndex) => {
+          const cell = row.cells[columnIndex] || { text: "", checked: false };
+          return cell.checked ? `${cell.text} ✓`.trim() : cell.text;
+        })
+      ),
+    ];
+
+    // 生成 Sheet 名（Excel 限制 31 字符）
+    let sheetName = table.name.substring(0, 31);
+    // 处理重名：如果已存在则加序号
+    if (usedNames.has(sheetName)) {
+      let counter = 2;
+      let candidate;
+      do {
+        const suffix = ` (${counter})`;
+        candidate = table.name.substring(0, 31 - suffix.length) + suffix;
+        counter++;
+      } while (usedNames.has(candidate));
+      sheetName = candidate;
+    }
+    usedNames.add(sheetName);
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  });
+
+  // 文件名使用第一个非空表格的名称
+  const fileBase = sanitizeFileName(nonEmptyTables[0].name || "工作进度表");
+  XLSX.writeFile(workbook, `${fileBase}.xlsx`);
+}
+// 触发隐藏的文件选择器，让用户选择 Excel 文件导入
 function openImportPicker() {
-  els.importFileInput.value = "";
-  els.importFileInput.click();
+    els.importFileInput.click();
 }
 
 function importExcel(event) {
@@ -580,21 +621,55 @@ function importExcel(event) {
   reader.onload = () => {
     try {
       const workbook = XLSX.read(reader.result, { type: "array", cellDates: true });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
-      const cleaned = trimMatrix(matrix);
-      if (!cleaned.length) {
-        window.alert("没有读取到表格内容。");
+      
+      if (workbook.SheetNames.length === 0) {
+        window.alert("文件中没有找到任何表格。");
         return;
       }
 
-      const imported = tableFromMatrix(cleaned, file.name.replace(/\.[^.]+$/, ""));
-      state.tables.push(imported);
-      state.activeId = imported.id;
+      let importedCount = 0;
+      let firstImportedId = null;
+
+      // 遍历所有 Sheet，每个 Sheet 恢复为一个表格
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" });
+        const cleaned = trimMatrix(matrix);
+        
+        // 跳过空 Sheet
+        if (!cleaned.length) return;
+
+        // 处理表格名冲突：如果已存在同名表格，加序号
+        let tableName = sheetName;
+        const nameExists = state.tables.some(t => t.name === tableName);
+        if (nameExists) {
+          let counter = 2;
+          while (state.tables.some(t => t.name === `${sheetName} (${counter})`)) {
+            counter++;
+          }
+          tableName = `${sheetName} (${counter})`;
+        }
+
+        const imported = tableFromMatrix(cleaned, tableName);
+        state.tables.push(imported);
+        if (!firstImportedId) {
+          firstImportedId = imported.id;
+        }
+        importedCount++;
+      });
+
+      if (importedCount === 0) {
+        window.alert("文件中没有可导入的数据。");
+        return;
+      }
+
+      // 切换到第一个导入的表格
+      state.activeId = firstImportedId;
       state.editMode = false;
       saveState();
       renderAll();
+      
+      window.alert(`成功导入 ${importedCount} 个表格！`);
     } catch (error) {
       console.error(error);
       window.alert("导入失败，请确认文件是普通 Excel / CSV 表格。");
@@ -602,7 +677,6 @@ function importExcel(event) {
   };
   reader.readAsArrayBuffer(file);
 }
-
 function trimMatrix(matrix) {
   const rows = matrix
     .map((row) => row.map((cell) => String(cell ?? "").trimEnd()))
